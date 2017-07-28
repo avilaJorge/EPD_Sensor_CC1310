@@ -182,6 +182,10 @@ STATIC Llc_netInfo_t parentInfo = {0};
 /******************************************************************************
  Local function prototypes
  *****************************************************************************/
+/* TODO: Move this code */
+/* Set the UART image event which sends image data to MSP432*/
+Util_setEvent(&Collector_events, COLLECTOR_UART_IMAGE_DATA_EVT);
+
 static void initializeClocks(void);
 static void dataCnfCB(ApiMac_mcpsDataCnf_t *pDataCnf);
 static void dataIndCB(ApiMac_mcpsDataInd_t *pDataInd);

@@ -65,6 +65,8 @@ extern "C"
 #define SENSOR_START_EVT 0x0001
 /*! Event ID - Reading Timeout Event */
 #define SENSOR_READING_TIMEOUT_EVT 0x0002
+/*! Event ID - Send Image data to MSP432 via UART */
+#define COLLECTOR_UART_IMAGE_DATA_EVT 0x0008
 /*! Clock tick period  */
 #define CLOCK_TICK_PERIOD     (10)
 /*! tick number for one ms  */
