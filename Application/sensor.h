@@ -64,9 +64,13 @@ extern "C"
 /*! Event ID - Start the device in the network */
 #define SENSOR_START_EVT 0x0001
 /*! Event ID - Reading Timeout Event */
-#define SENSOR_READING_TIMEOUT_EVT 0x0002
+#define SENSOR_READING_TIMEOUT_EVT  0x0002
+/*! Event ID - Incoming Image Data Event */
+#define SENSOR_INCOMING_IMAGE_DATA  0x0004
 /*! Event ID - Send Image data to MSP432 via UART */
-#define COLLECTOR_UART_IMAGE_DATA_EVT 0x0008
+#define SENSOR_UART_IMAGE_DATA_EVT  0x0008
+/*! Event ID - Start EPD update process */
+#define SENSOR_START_EPD_UPDATE_EVT 0x0016
 /*! Clock tick period  */
 #define CLOCK_TICK_PERIOD     (10)
 /*! tick number for one ms  */

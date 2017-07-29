@@ -151,6 +151,9 @@ static uint_fast32_t joinTimeTicks = 0;
 /* Interim Delay Ticks (used for average delay calculations) */
 static uint_fast32_t interimDelayTicks = 0;
 
+/* Number of image data packets to expect from the collector */
+static uint16_t  numImageDataPackets = 0;
+
 /*! Device's Outgoing MSDU Handle values */
 STATIC uint8_t deviceTxMsduHandle = 0;
 
@@ -197,6 +200,7 @@ static void processSensorRampMsgEvt(void);
 static bool sendSensorMessage(ApiMac_sAddr_t *pDstAddr,
                               Smsgs_sensorMsg_t *pMsg);
 static void processConfigRequest(ApiMac_mcpsDataInd_t *pDataInd);
+static void processImageDataRequest(ApiMac_mcpsDataInd_t *pDataInd); //XXX:
 static bool sendConfigRsp(ApiMac_sAddr_t *pDstAddr, Smsgs_configRspMsg_t *pMsg);
 static uint16_t validateFrameControl(uint16_t frameControl);
 
@@ -710,6 +714,13 @@ static void dataIndCB(ApiMac_mcpsDataInd_t *pDataInd)
                 break;
 #endif //FEATURE_NATIVE_OAD
 
+            case Smsgs_cmdIds_imageDataReq:
+                processImageDataRequest(pDataInd);
+                break; //XXX:
+
+            case Smsgs_cmdIds_imageData:
+                break;
+
             default:
                 /* Should not receive other messages */
                 break;
@@ -1050,6 +1061,43 @@ static void processConfigRequest(ApiMac_mcpsDataInd_t *pDataInd)
 
     /* Response the the source device */
     sendConfigRsp(&pDataInd->srcAddr, &configRsp);
+}
+
+/*!
+ * @brief      Process the Image Data Request message.
+ *
+ * @param      pDataInd - pointer to the data indication information
+ */
+static void processImageDataRequest(ApiMac_mcpsDataInd_t *pDataInd) {
+    //XXX:
+
+    uint8_t *pBuf = pDataInd->msdu.p;
+    uint8_t msgBuf[SMSGS_IMAGE_DATA_RESPONSE_MSG_LEN];
+
+    /* Make sure the message is the correct size */
+    if(pDataInd->msdu.len == SMSGS_IMAGE_DATA_REQUEST_MSG_LEN) {
+
+        /* Set the image request event ID so we know to expect image data */
+        Util_setEvent(&Sensor_events, SENSOR_INCOMING_IMAGE_DATA);
+
+        /* Save off the number of packets to expect from the collector */
+        numImageDataPackets = pBuf[1];
+
+        /* Fill the image data response buffer */
+        msgBuf[0] = (uint8_t) Smsgs_cmdIds_imageDataRsp;
+        /* TODO: should make an enum for the below field and figure
+         * out in what cases the sensor would not be ready
+         */
+        msgBuf[1] = true; /* Set to true if sensor is ready to RX image data */
+
+
+        /* Send the image data response */
+        Sensor_sendMsg(Smsgs_cmdIds_imageDataRsp,
+                       &pDataInd->srcAddr,
+                       true,
+                       SMSGS_IMAGE_DATA_RESPONSE_MSG_LEN,
+                       msgBuf);
+    }
 }
 
 /*!
