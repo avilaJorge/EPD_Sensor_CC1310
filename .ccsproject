@@ -14,4 +14,5 @@
 	<templateProperties value="id=sensor_cc1310lp.projectspec.sensor_cc1310lp,type=rtsc,products=com.ti.SIMPLELINK_CC13X0_SDK;com.ti.rtsc.XDCtools;,xdcToolsVersion=3.50.00.10,target=ti.targets.arm.elf.M3,platform=ti.platforms.simplelink:CC1350F128,buildProfile=release,isHybrid=true,configuroOptions=--compileOptions &quot;${COMPILER_FLAGS} &quot;,"/>
 	<origin value="c:\ti\simplelink_cc13x0_sdk_1_40_00_10\examples\rtos\CC1310_LAUNCHXL\ti154stack\sensor\tirtos\ccs\sensor_cc1310lp.projectspec"/>
 	<filesToOpen value="Application/subg/features.h,Application/subg/config.h,"/>
+	<isTargetManual value="false"/>
 </projectOptions>

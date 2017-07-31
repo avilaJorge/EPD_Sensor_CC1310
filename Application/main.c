@@ -153,7 +153,9 @@ extern ApiMac_sAddrExt_t ApiMac_extAddr;
 Task_Struct myTask;
 Char myTaskStack[APP_TASK_STACK_SIZE];
 
-PIN_Handle ledPinHandle;
+UART_Handle uartHandle;
+
+PIN_Handle  ledPinHandle;
 
 /* Global memory storage for a PIN_Config table */
 #ifdef BLE_SUPPORT
@@ -404,6 +406,14 @@ Void main()
     uartParams.baudRate = 115200;
     UartPrintf_init(UART_open(Board_UART0, &uartParams));
 #endif /* BOARD_DISPLAY_USE_UART */
+
+#if defined(BOARD_EPD_USE_UART)
+    /* Enable sending image data to EPD via UART */
+    UART_init();
+    UART_Params_init(&uartParams);
+    uartParams.baudRate = 115200;
+    uartHandle = UART_open(Board_UART0, &uartParams);
+#endif /* BOARD_EPD_USE_UART */
 #endif
 
     /* Configure task. */

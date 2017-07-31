@@ -112,7 +112,8 @@
 									<listOptionValue builtIn="false" value="xPOWER_MEAS"/>
 									<listOptionValue builtIn="false" value="MAC_PNM_MAX_NUMBER_OF_NODE=3"/>
 									<listOptionValue builtIn="false" value="MAX_DEVICE_TABLE_ENTRIES=3"/>
-									<listOptionValue builtIn="false" value="BOARD_DISPLAY_USE_UART"/>
+									<listOptionValue builtIn="false" value="xBOARD_DISPLAY_USE_UART"/>
+									<listOptionValue builtIn="false" value="BOARD_EPD_USE_UART"/>
 									<listOptionValue builtIn="false" value="xBOARD_DISPLAY_USE_LCD"/>
 									<listOptionValue builtIn="false" value="ONE_PAGE_NV"/>
 									<listOptionValue builtIn="false" value="ONE_PAGE_NV_FULL_HDR"/>

@@ -58,6 +58,12 @@
 #include "config.h"
 #include "board_led.h"
 #include "icall.h"
+/* For usleep() */
+#include <unistd.h>
+
+/* Image Header files */
+#include <ti/drivers/utils/RingBuf.h>
+#include "Data_Module.h"
 
 #ifdef FEATURE_NATIVE_OAD
 #include <common/native_oad/oad_protocol.h>
@@ -182,12 +188,51 @@ STATIC Smsgs_humiditySensorField_t humiditySensor =
 
 STATIC Llc_netInfo_t parentInfo = {0};
 
+/* For CMD_EraseFlash */
+Command_info_t eraseCmdInfo = {
+        RECV_HEADER0,   // Header0
+        RECV_HEADER1,   // Header1
+        0,              // Packet_Index
+        CMD_EraseFlash, // cmd
+        6,              // Length
+        Res_Not,        // Response
+        Result_OK       // Result
+};
+
+Flash_Parameter_Info_t eraseFlashInfo = {
+        0x001A0000, // Address //TODO: Get this information from Flash libraries in PDI Apps
+        0x0080      // Length
+};
+
+/* For CMD_WriteImageFileInfo */
+Command_info_t writeImgCmdInfo = {
+        RECV_HEADER0,           // Header0
+        RECV_HEADER1,           // Header1
+        1,                      // Packet_Index
+        CMD_WriteImageFileInfo, // cmd
+        32,                     // Length
+        Res_Result,             // Response
+        Result_Fail             // Result
+};
+
+ImageFlie_info_t imageFileInfo = {
+        0x001A7FE0,      //Address; //TODO: Use Enums for these
+        938,             //ImagePacketLen; //TODO: Update using sent data
+        0xFE,            //Mark;
+        11,              //PanelSize;
+        3,               //ImageType;
+        "Danger"         //Name[23];
+};
+
+/* Image File */
+/* For Sending Packets over UART */
+Recv_Packet_info_t packet;
+char data[sizeof(Recv_Packet_info_t)];
+
+
 /******************************************************************************
  Local function prototypes
  *****************************************************************************/
-/* TODO: Move this code */
-/* Set the UART image event which sends image data to MSP432*/
-Util_setEvent(&Collector_events, COLLECTOR_UART_IMAGE_DATA_EVT);
 
 static void initializeClocks(void);
 static void dataCnfCB(ApiMac_mcpsDataCnf_t *pDataCnf);
@@ -202,6 +247,7 @@ static bool sendSensorMessage(ApiMac_sAddr_t *pDstAddr,
 static void processConfigRequest(ApiMac_mcpsDataInd_t *pDataInd);
 static void processImageDataRequest(ApiMac_mcpsDataInd_t *pDataInd); //XXX:
 static bool sendConfigRsp(ApiMac_sAddr_t *pDstAddr, Smsgs_configRspMsg_t *pMsg);
+static bool startEPDUpdate(void);
 static uint16_t validateFrameControl(uint16_t frameControl);
 
 static void jdllcJoinedCb(ApiMac_deviceDescriptor_t *pDevInfo,
@@ -443,6 +489,18 @@ void Sensor_process(void)
 
         /* Clear the event */
         Util_clearEvent(&Sensor_events, SENSOR_READING_TIMEOUT_EVT);
+    }
+
+    //TODO: Add event code here for START_EPD event and SEND event
+    /* Are we starting an EPD update? */
+    if(Sensor_events & SENSOR_START_EPD_UPDATE_EVT) {
+
+        /* Start the EPD update process */
+
+        /* Clear the start EPD event but set the send EPD image data event */
+        Util_clearEvent(&Sensor_events, SENSOR_START_EPD_UPDATE_EVT);
+        Util_setEvent(&Sensor_events, SENSOR_SEND_EPD_IMAGE_DATA_EVT);
+
     }
 
     /* Process LLC Events */
@@ -1077,7 +1135,7 @@ static void processImageDataRequest(ApiMac_mcpsDataInd_t *pDataInd) {
     /* Make sure the message is the correct size */
     if(pDataInd->msdu.len == SMSGS_IMAGE_DATA_REQUEST_MSG_LEN) {
 
-        /* Set the image request event ID so we know to expect image data */
+        /* Set the image request event ID so we know to expect incoming image data */
         Util_setEvent(&Sensor_events, SENSOR_INCOMING_IMAGE_DATA);
 
         /* Save off the number of packets to expect from the collector */
@@ -1099,6 +1157,24 @@ static void processImageDataRequest(ApiMac_mcpsDataInd_t *pDataInd) {
                        msgBuf);
     }
 }
+
+/*! XXX:
+ * @brief      Start the EPD update process.  This will send the first two messages
+ *             that the EPD device expects which are to erase flash that previously
+ *             stored the image and to write the image file information to this flash.
+ *
+ */
+static bool startEPDUpdate(void) {
+
+    unint16_t bytesSent = 0; // For debugging purposes
+
+    /* First we send the erase flash command */
+    bytesSent = UART_write(uartHandle, (uint8_t) &eraseCmdInfo,
+                           sizeof(Flash_Parameter_Info_t));
+    // After a short pause we can send the payload
+
+}
+
 
 /*!
  * @brief   Build and send Config Response message
