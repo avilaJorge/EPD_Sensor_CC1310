@@ -70,7 +70,9 @@ extern "C"
 /*! Event ID - Send Image data to MSP432 via UART */
 #define SENSOR_SEND_EPD_IMAGE_DATA_EVT  0x0008
 /*! Event ID - Start EPD update process */
-#define SENSOR_START_EPD_UPDATE_EVT     0x0016
+#define SENSOR_START_EPD_UPDATE_EVT     0x0010
+/*! Event ID - Display EPD Image */
+#define SENSOR_DISPLAY_IMAGE_EVT        0x0020
 /*! Clock tick period  */
 #define CLOCK_TICK_PERIOD     (10)
 /*! tick number for one ms  */

@@ -39,25 +39,25 @@
 #define  RECV_HEADER1  0x54
 
 
-typedef enum { CMD_Check,
-               CMD_Ver,
-               CMD_EraseFlash,
-               CMD_EraseEntireFlash,
-               CMD_ReadData,
-               CMD_WriteData,
-               CMD_EPDShow,
-               CMD_WriteImageFileInfo,
-               CMD_ReadImageFileInfo,
-               CMD_WriteImageData,
-               CMD_FastShow,
-               CMD_WriteRunInfo,
-               CMD_ReadRunIinfo,
-               CMD_EraseRunInfo,
-               CMD_WriteBootInfo,
-               CMD_ReadBootInfo,
-               CMD_EraseBootInfo,
-               CMD_Debug,
-               CMD_PreRun
+typedef enum { CMD_Check,               // 0
+               CMD_Ver,                 // 1
+               CMD_EraseFlash,          // 2
+               CMD_EraseEntireFlash,    // 3
+               CMD_ReadData,            // 4
+               CMD_WriteData,           // 5
+               CMD_EPDShow,             // 6
+               CMD_WriteImageFileInfo,  // 7
+               CMD_ReadImageFileInfo,   // 8
+               CMD_WriteImageData,      // 9
+               CMD_FastShow,            // 10
+               CMD_WriteRunInfo,        // 11
+               CMD_ReadRunIinfo,        // 12
+               CMD_EraseRunInfo,        // 13
+               CMD_WriteBootInfo,       // 14
+               CMD_ReadBootInfo,        // 15
+               CMD_EraseBootInfo,       // 16
+               CMD_Debug,               // 17
+               CMD_PreRun               // 18
              } CmdArray_t;
 typedef enum
 {
@@ -234,7 +234,7 @@ typedef struct
 	uint8_t   		PanelSize;
 	uint8_t		 	ImageType;
 	char        	Name[23];
-} ImageFlie_info_t;
+} ImageFile_info_t;
 
 #define Flash_Addr_Size     4
 #define Flash_Sector_Size   2

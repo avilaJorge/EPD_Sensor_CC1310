@@ -88,6 +88,15 @@
 /* App marker in MSDU handle */
 #define APP_MARKER_MSDU_HANDLE 0x80
 
+/* Size of image data buffer */
+#define IMAGE_DATA_BUFFER_SIZE 4000
+
+/* Image data packet size */
+#define IMAGE_DATA_PACKET_SIZE 32
+
+/* Number of image packets */
+#define IMAGE_DATA_NUM_PACKETS 938
+
 /* App Message Tracking Mask */
 #define APP_MASK_MSDU_HANDLE 0x60
 
@@ -160,6 +169,18 @@ static uint_fast32_t interimDelayTicks = 0;
 /* Number of image data packets to expect from the collector */
 static uint16_t  numImageDataPackets = 0;
 
+/* RingBuf Object */
+static RingBuf_Object ringBufObj;
+
+/* Buffer for receiving image data */
+static uint8_t dataBuf[IMAGE_DATA_BUFFER_SIZE];
+
+/* Index of image data packet */
+static uint16_t packetIndex = 0;
+
+/* Data array for sending UART messages */
+static uint8_t uartImageDataPacket[IMAGE_DATA_PACKET_SIZE];
+
 /*! Device's Outgoing MSDU Handle values */
 STATIC uint8_t deviceTxMsduHandle = 0;
 
@@ -205,30 +226,60 @@ Flash_Parameter_Info_t eraseFlashInfo = {
 };
 
 /* For CMD_WriteImageFileInfo */
-Command_info_t writeImgCmdInfo = {
+Command_info_t imageFileCmdInfo = {
         RECV_HEADER0,           // Header0
         RECV_HEADER1,           // Header1
-        1,                      // Packet_Index
+        0,                      // Packet_Index
         CMD_WriteImageFileInfo, // cmd
-        32,                     // Length
+        0x0020,                 // Length
         Res_Result,             // Response
         Result_Fail             // Result
 };
 
-ImageFlie_info_t imageFileInfo = {
-        0x001A7FE0,      //Address; //TODO: Use Enums for these
-        938,             //ImagePacketLen; //TODO: Update using sent data
-        0xFE,            //Mark;
-        11,              //PanelSize;
-        3,               //ImageType;
-        "Danger"         //Name[23];
+ImageFile_info_t imageFileInfo = {
+        0x001A7FE0,             //Address; //TODO: Use Enums for these
+        IMAGE_DATA_NUM_PACKETS, //ImagePacketLen; //TODO: Update using sent data
+        M_IsExist,              //Mark; (0xFE = M_IsExist)
+        11,                     //PanelSize;
+        0x03,                   //ImageType;
+        "Danger"                //Name[23];
 };
 
-/* Image File */
-/* For Sending Packets over UART */
-Recv_Packet_info_t packet;
-char data[sizeof(Recv_Packet_info_t)];
+/* For CMD_WriteImageData */
+Command_info_t imageCmdInfo = {
+        RECV_HEADER0,           // Header0
+        RECV_HEADER1,           // Header1
+        0,                      // Packet_Index
+        CMD_WriteImageData,     // cmd
+        0x0026,                 // Length
+        Res_Not,                // Response
+        Result_Fail             // Result
+};
 
+Flash_Info_t imageDataInfo = {
+        0x001A0000, // Address
+        0x0020      // Length
+};
+
+/* For CMD_EPDShow */
+Command_info_t showCmdInfo = {
+        RECV_HEADER0,           // Header0
+        RECV_HEADER1,           // Header1
+        0,                      // Packet_Index
+        CMD_EPDShow,            // cmd
+        0x00C0,                 // Length
+        Res_Result,             // Response
+        Result_Fail             // Result
+};
+
+ShowEpd_Info_t showInfo = {
+        0x0A,                   // Driver_Type
+        0x0B,                   // EPD_Size
+        0x9C,                   // Temperature
+        OTP_Mode,               // IsOTP (OperationMode_t)
+        0x001A0000,             // PrevImageAddress
+        0x001A0000              // NewImageAddress
+};
 
 /******************************************************************************
  Local function prototypes
@@ -246,8 +297,10 @@ static bool sendSensorMessage(ApiMac_sAddr_t *pDstAddr,
                               Smsgs_sensorMsg_t *pMsg);
 static void processConfigRequest(ApiMac_mcpsDataInd_t *pDataInd);
 static void processImageDataRequest(ApiMac_mcpsDataInd_t *pDataInd); //XXX:
+static uint8_t receiveImageData(ApiMac_mcpsDataInd_t *pDataInd);
 static bool sendConfigRsp(ApiMac_sAddr_t *pDstAddr, Smsgs_configRspMsg_t *pMsg);
-static bool startEPDUpdate(void);
+static uint16_t startEPDUpdate(void);
+static uint16_t sendImageDataPacket(void);
 static uint16_t validateFrameControl(uint16_t frameControl);
 
 static void jdllcJoinedCb(ApiMac_deviceDescriptor_t *pDevInfo,
@@ -389,6 +442,9 @@ void Sensor_init(void)
     /* Initialize the app clocks */
     initializeClocks();
 
+    /* Initialize RingBuf */
+    RingBuf_construct(ringBufObj, dataBuf, IMAGE_DATA_BUFFER_SIZE);
+
     if(CONFIG_AUTO_START)
     {
         /* Start the device */
@@ -496,10 +552,30 @@ void Sensor_process(void)
     if(Sensor_events & SENSOR_START_EPD_UPDATE_EVT) {
 
         /* Start the EPD update process */
+        startEPDUpdate();
 
-        /* Clear the start EPD event but set the send EPD image data event */
+        /* Clear the start EPD event and set the send EPD image data event */
         Util_clearEvent(&Sensor_events, SENSOR_START_EPD_UPDATE_EVT);
         Util_setEvent(&Sensor_events, SENSOR_SEND_EPD_IMAGE_DATA_EVT);
+
+    }
+
+    /* Are we ready to begin sending image data via UART? */
+    if(Sensor_events & SENSOR_SEND_EPD_IMAGE_DATA_EVT) {
+
+        /* Are we done sending packets? */
+        if(packetIndex < IMAGE_DATA_NUM_PACKETS) {
+            sendImageDataPacket();
+            packetIndex++;
+        } else {
+            /* If so clear send event and set display event */
+            Util_clearEvent(&Sensor_events, SENSOR_SEND_EPD_IMAGE_DATA_EVT);
+            Util_setEvent(&Sensor_events, SENSOR_DISPLAY_IMAGE_EVT);
+        }
+    }
+
+    /* Are we ready to display the EPD image? */
+    if(Sensor_events & SENSOR_DISPLAY_IMAGE_EVT) {
 
     }
 
@@ -777,6 +853,7 @@ static void dataIndCB(ApiMac_mcpsDataInd_t *pDataInd)
                 break; //XXX:
 
             case Smsgs_cmdIds_imageData:
+                receiveImageData(pDataInd);
                 break;
 
             default:
@@ -1164,17 +1241,78 @@ static void processImageDataRequest(ApiMac_mcpsDataInd_t *pDataInd) {
  *             stored the image and to write the image file information to this flash.
  *
  */
-static bool startEPDUpdate(void) {
+static uint16_t startEPDUpdate(void) {
 
-    unint16_t bytesSent = 0; // For debugging purposes
+    uint16_t bytesSent = 0;
 
     /* First we send the erase flash command */
-    bytesSent = UART_write(uartHandle, (uint8_t) &eraseCmdInfo,
-                           sizeof(Flash_Parameter_Info_t));
+    bytesSent = UART_write(uartHandle, (uint8_t *) &eraseCmdInfo,
+                           sizeof(Command_info_t));
     // After a short pause we can send the payload
-
+    // TODO: Replace this with something better
+    int i;
+    for(i = 0; i < 3; i++) { }
+    // Send the message payload
+    bytesSent += UART_write(uartHandle, (uint8_t *) &eraseFlashInfo,
+                           sizeof(Flash_Parameter_Info_t));
+    // Another short pause
+    for(i = 0; i < 3; i++) { }
+    bytesSent += UART_write(uartHandle, (uint8_t *) &imageFileCmdInfo,
+                           sizeof(Command_info_t));
+    // One last short pause
+    for(i = 0; i < 3; i++) { }
+    bytesSent += UART_write(uartHandle, (uint8_t *) &imageFileInfo,
+                           sizeof(ImageFile_info_t));
+    return bytesSent;
 }
 
+/*!
+ * @brief      Receive image data coming from collecter.
+ *
+ * @param      pDataInd - pointer to the data indication information
+ */
+static uint8_t receiveImageData(ApiMac_mcpsDataInd_t *pDataInd) {
+
+    uint8_t *pBuf = pDataInd->msdu.p;
+    uint8_t bytesReceived = 0;
+
+    /* Make sure the message is the correct size */
+    if(pDataInd->msdu.len == IMAGE_DATA_PACKET_SIZE) {
+        // Put image data in the buffer
+        int i;
+        for(i = 0; i < IMAGE_DATA_PACKET_SIZE; i++) {
+            RingBuf_put(ringBufObj, pBuf[i]);
+            bytesRecieved++;
+        }
+    }
+
+    return bytesRecevied;
+}
+
+/*!
+ * @brief      Send image data packet
+ *
+ */
+static uint16_t sendImageDataPacket(void) {
+
+    int i;
+    uint16_t bytesSent = 0;
+    uint8_t imageByte;
+
+    /* Load data buffer with image data */
+    if(RingBuf_getCount(ringBufObj) > 0  && !RingBuf_isFull(ringBufObj)) {
+        for(i = 0; i < IMAGE_DATA_PACKET_SIZE; i++) {
+            RingBuf_get(ringBufObj, &imageByte);
+            uartImageDataPacket[i] = imageByte;
+        }
+    }
+
+    bytesSent = UART_write(uartHandle, (uint8_t) &imageCmdInfo,
+                           sizeof(Command_info_t));
+    for(i = 0; i < 3; i++) {}
+    bytesSent += UART_write(uartHandle, (uint8_t *) uartImageDataPacket,
+                            sizeof()
+}
 
 /*!
  * @brief   Build and send Config Response message
