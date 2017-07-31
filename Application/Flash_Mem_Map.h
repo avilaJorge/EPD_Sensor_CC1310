@@ -46,8 +46,8 @@
 #define PayloadLen 				32
 #define BlockSector 			4
 #define ImageInfoSize 			32
-#define SectorSize 				(1024 * BlockSector)
-#define BlockSize 				(uint32_t)(BlockSector * SectorSize)//1 Block=16 KBytes
+#define SectorSize 				(1024 * BlockSector)                 //1 Sector=4 KBytes (4096 bits)
+#define BlockSize 				(uint32_t)(BlockSector * SectorSize) //1 Block=16 KBytes (16384 bits)
 
 #define BootBlockMax			32
 #define FunBootAddress  		(uint32_t)(FunctionBlock * BlockSize)

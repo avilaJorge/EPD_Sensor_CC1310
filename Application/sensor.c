@@ -257,8 +257,8 @@ Command_info_t imageCmdInfo = {
 };
 
 Flash_Info_t imageDataInfo = {
-        0x001A0000, // Address
-        0x0020      // Length
+        0x001A0000,             // Address
+        0x0020                  // Length
 };
 
 /* For CMD_EPDShow */
@@ -301,6 +301,7 @@ static uint8_t receiveImageData(ApiMac_mcpsDataInd_t *pDataInd);
 static bool sendConfigRsp(ApiMac_sAddr_t *pDstAddr, Smsgs_configRspMsg_t *pMsg);
 static uint16_t startEPDUpdate(void);
 static uint16_t sendImageDataPacket(void);
+static uint16_t displayImage(void);
 static uint16_t validateFrameControl(uint16_t frameControl);
 
 static void jdllcJoinedCb(ApiMac_deviceDescriptor_t *pDevInfo,
@@ -577,6 +578,9 @@ void Sensor_process(void)
     /* Are we ready to display the EPD image? */
     if(Sensor_events & SENSOR_DISPLAY_IMAGE_EVT) {
 
+        /* Display the image and clear the event */
+        displayImage();
+        Util_clearEvent(&Sensor_events, SENSOR_DISPLAY_IMAGE_EVT);
     }
 
     /* Process LLC Events */
@@ -1240,6 +1244,7 @@ static void processImageDataRequest(ApiMac_mcpsDataInd_t *pDataInd) {
  *             that the EPD device expects which are to erase flash that previously
  *             stored the image and to write the image file information to this flash.
  *
+ * @return     Returns number of bytes sent via UART
  */
 static uint16_t startEPDUpdate(void) {
 
@@ -1270,6 +1275,8 @@ static uint16_t startEPDUpdate(void) {
  * @brief      Receive image data coming from collecter.
  *
  * @param      pDataInd - pointer to the data indication information
+ *
+ * @return     Returns number of bytes sent via UART
  */
 static uint8_t receiveImageData(ApiMac_mcpsDataInd_t *pDataInd) {
 
@@ -1292,6 +1299,7 @@ static uint8_t receiveImageData(ApiMac_mcpsDataInd_t *pDataInd) {
 /*!
  * @brief      Send image data packet
  *
+ * @return     Returns number of bytes sent via UART
  */
 static uint16_t sendImageDataPacket(void) {
 
@@ -1307,11 +1315,34 @@ static uint16_t sendImageDataPacket(void) {
         }
     }
 
+    /* Send UART messages */
     bytesSent = UART_write(uartHandle, (uint8_t) &imageCmdInfo,
                            sizeof(Command_info_t));
     for(i = 0; i < 3; i++) {}
     bytesSent += UART_write(uartHandle, (uint8_t *) uartImageDataPacket,
-                            sizeof()
+                            IMAGE_DATA_PACKET_SIZE);
+
+    imageCmdInfo.Packet_index++;
+    return bytesSent;
+}
+
+/*!
+ * @brief      Send display image command to EPD
+ *
+ * @return     Returns number of bytes sent via UART
+ */
+static uint16_t displayImage(void) {
+
+    uint16_t bytesSent = 0;
+
+    /* Send UART messages */
+    bytesSent = UART_write(uartHandle, (uint8_t *) &showCmdInfo,
+                           sizeof(Command_info_t));
+    for(i = 0; i < 3; i++) {}
+    bytesSent += UART_write(uartHandle, (uint8_t *) &showInfo,
+                           sizeof(ShowEpd_Info_t));
+
+    return bytesSent;
 }
 
 /*!

@@ -31,7 +31,7 @@
 **/
 
 #include <HW_drivers/Flash_Mem_Map.h>
-#include "conf_EPD.h"
+//#include "conf_EPD.h"
 #include "Data_Module.h"
 uint32_t GetFunBootAddress(int index)
 {
