@@ -1,0 +1,10 @@
+.gitignore
+*.0
+*.ln
+*.sw*
+*~
+a.out
+core
+sensor_cc1310lp/
+Tools/src/
+.launches/
