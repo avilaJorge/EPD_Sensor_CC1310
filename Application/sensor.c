@@ -58,12 +58,11 @@
 #include "config.h"
 #include "board_led.h"
 #include "icall.h"
-/* For usleep() */
-#include <unistd.h>
 
 /* Image Header files */
 #include <ti/drivers/utils/RingBuf.h>
 #include "Data_Module.h"
+#include <ti/drivers/UART.h>
 
 #ifdef FEATURE_NATIVE_OAD
 #include <common/native_oad/oad_protocol.h>
@@ -82,20 +81,20 @@
 #endif
 #endif
 
+/* Size of image data buffer */
+#define IMAGE_DATA_BUFFER_SIZE 4000
+
+/* Image data packet size */
+#define IMAGE_DATA_PACKET_SIZE 100
+
+/* Number of image packets */
+#define IMAGE_DATA_NUM_PACKETS 469
+
 /* default MSDU Handle rollover */
 #define MSDU_HANDLE_MAX 0x1F
 
 /* App marker in MSDU handle */
 #define APP_MARKER_MSDU_HANDLE 0x80
-
-/* Size of image data buffer */
-#define IMAGE_DATA_BUFFER_SIZE 4000
-
-/* Image data packet size */
-#define IMAGE_DATA_PACKET_SIZE 32
-
-/* Number of image packets */
-#define IMAGE_DATA_NUM_PACKETS 938
 
 /* App Message Tracking Mask */
 #define APP_MASK_MSDU_HANDLE 0x60
@@ -114,7 +113,7 @@
 #define MAX_REPORTING_INTERVAL 360000
 
 /* Polling Interval Min and Max (in milliseconds) */
-#define MIN_POLLING_INTERVAL 1000
+#define MIN_POLLING_INTERVAL 100//1000
 #define MAX_POLLING_INTERVAL 10000
 
 /* Inter packet interval in certification test mode */
@@ -131,6 +130,11 @@
 #error "PHY ID is wrong."
 #endif
 #endif
+/******************************************************************************
+ External Variables
+ *****************************************************************************/
+
+extern UART_Handle uartHandle;
 
 /******************************************************************************
  Global variables
@@ -166,11 +170,9 @@ static uint_fast32_t joinTimeTicks = 0;
 /* Interim Delay Ticks (used for average delay calculations) */
 static uint_fast32_t interimDelayTicks = 0;
 
-/* Number of image data packets to expect from the collector */
-static uint16_t  numImageDataPackets = 0;
-
-/* RingBuf Object */
+/* RingBuf Object and handle for object */
 static RingBuf_Object ringBufObj;
+static RingBuf_Handle ringBufHandle = &ringBufObj;
 
 /* Buffer for receiving image data */
 static uint8_t dataBuf[IMAGE_DATA_BUFFER_SIZE];
@@ -444,7 +446,7 @@ void Sensor_init(void)
     initializeClocks();
 
     /* Initialize RingBuf */
-    RingBuf_construct(ringBufObj, dataBuf, IMAGE_DATA_BUFFER_SIZE);
+    RingBuf_construct(ringBufHandle, dataBuf, IMAGE_DATA_BUFFER_SIZE);
 
     if(CONFIG_AUTO_START)
     {
@@ -566,8 +568,15 @@ void Sensor_process(void)
 
         /* Are we done sending packets? */
         if(packetIndex < IMAGE_DATA_NUM_PACKETS) {
-            sendImageDataPacket();
-            packetIndex++;
+
+            /* Is there anything left to send in the RingBuf? */
+            if(RingBuf_getCount(ringBufHandle) > 0) {
+                sendImageDataPacket();
+                packetIndex++;
+            } else {
+                /* Clear the event that calls this function in order to continue RX */
+                Util_clearEvent(&Sensor_events, SENSOR_SEND_EPD_IMAGE_DATA_EVT);
+            }
         } else {
             /* If so clear send event and set display event */
             Util_clearEvent(&Sensor_events, SENSOR_SEND_EPD_IMAGE_DATA_EVT);
@@ -1210,17 +1219,10 @@ static void processConfigRequest(ApiMac_mcpsDataInd_t *pDataInd)
 static void processImageDataRequest(ApiMac_mcpsDataInd_t *pDataInd) {
     //XXX:
 
-    uint8_t *pBuf = pDataInd->msdu.p;
     uint8_t msgBuf[SMSGS_IMAGE_DATA_RESPONSE_MSG_LEN];
 
     /* Make sure the message is the correct size */
     if(pDataInd->msdu.len == SMSGS_IMAGE_DATA_REQUEST_MSG_LEN) {
-
-        /* Set the image request event ID so we know to expect incoming image data */
-        Util_setEvent(&Sensor_events, SENSOR_INCOMING_IMAGE_DATA);
-
-        /* Save off the number of packets to expect from the collector */
-        numImageDataPackets = pBuf[1];
 
         /* Fill the image data response buffer */
         msgBuf[0] = (uint8_t) Smsgs_cmdIds_imageDataRsp;
@@ -1284,16 +1286,20 @@ static uint8_t receiveImageData(ApiMac_mcpsDataInd_t *pDataInd) {
     uint8_t bytesReceived = 0;
 
     /* Make sure the message is the correct size */
-    if(pDataInd->msdu.len == IMAGE_DATA_PACKET_SIZE) {
+    if(pDataInd->msdu.len == IMAGE_DATA_PACKET_SIZE + 1) {
         // Put image data in the buffer
         int i;
-        for(i = 0; i < IMAGE_DATA_PACKET_SIZE; i++) {
-            RingBuf_put(ringBufObj, pBuf[i]);
-            bytesRecieved++;
+        for(i = 1; i < IMAGE_DATA_PACKET_SIZE + 1; i++) {
+            RingBuf_put(ringBufHandle, pBuf[i]);
+            bytesReceived++;
         }
     }
 
-    return bytesRecevied;
+    /* Set the UART event if the RingBuf is full */
+    if(RingBuf_isFull(ringBufHandle)) {
+        Util_setEvent(&Sensor_events, SENSOR_SEND_EPD_IMAGE_DATA_EVT);
+    }
+    return bytesReceived;
 }
 
 /*!
@@ -1308,15 +1314,15 @@ static uint16_t sendImageDataPacket(void) {
     uint8_t imageByte;
 
     /* Load data buffer with image data */
-    if(RingBuf_getCount(ringBufObj) > 0  && !RingBuf_isFull(ringBufObj)) {
+    if(RingBuf_getCount(ringBufHandle) > 0) {
         for(i = 0; i < IMAGE_DATA_PACKET_SIZE; i++) {
-            RingBuf_get(ringBufObj, &imageByte);
+            RingBuf_get(ringBufHandle, &imageByte);
             uartImageDataPacket[i] = imageByte;
         }
     }
 
     /* Send UART messages */
-    bytesSent = UART_write(uartHandle, (uint8_t) &imageCmdInfo,
+    bytesSent = UART_write(uartHandle, (uint8_t *) &imageCmdInfo,
                            sizeof(Command_info_t));
     for(i = 0; i < 3; i++) {}
     bytesSent += UART_write(uartHandle, (uint8_t *) uartImageDataPacket,
@@ -1334,6 +1340,7 @@ static uint16_t sendImageDataPacket(void) {
 static uint16_t displayImage(void) {
 
     uint16_t bytesSent = 0;
+    int i;
 
     /* Send UART messages */
     bytesSent = UART_write(uartHandle, (uint8_t *) &showCmdInfo,

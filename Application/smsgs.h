@@ -197,7 +197,7 @@ The <b>Sensor Ramp Data Message</b> is defined as:
 /*! Toggle Led Request message length (over-the-air length) */
 #define SMSGS_TOGGLE_LED_RESPONSE_MSG_LEN 2
 /*! Image Data Request message length (over-the-air length) */
-#define SMSGS_IMAGE_DATA_REQUEST_MSG_LEN 2
+#define SMSGS_IMAGE_DATA_REQUEST_MSG_LEN 1
 /*! Image Data Response message length (over-the-air length) */
 #define SMSGS_IMAGE_DATA_RESPONSE_MSG_LEN 2
 

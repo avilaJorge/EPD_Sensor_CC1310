@@ -33,7 +33,9 @@
 
 #ifndef MEM_FLASH_H_
 #define MEM_FLASH_H_
-#include "conf_EPD.h"
+//#include "conf_EPD.h"
+#include <stdint.h>
+#include <stdbool.h>
 /******************************************************************************
  * \brief Each EPD size has 32 pages of image
  *

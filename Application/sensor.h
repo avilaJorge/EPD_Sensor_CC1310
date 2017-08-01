@@ -65,8 +65,6 @@ extern "C"
 #define SENSOR_START_EVT 0x0001
 /*! Event ID - Reading Timeout Event */
 #define SENSOR_READING_TIMEOUT_EVT      0x0002
-/*! Event ID - Incoming Image Data Event */
-#define SENSOR_INCOMING_IMAGE_DATA      0x0004
 /*! Event ID - Send Image data to MSP432 via UART */
 #define SENSOR_SEND_EPD_IMAGE_DATA_EVT  0x0008
 /*! Event ID - Start EPD update process */

@@ -215,7 +215,7 @@ extern "C"
 /*! PAN Config Solicit trickle timer duration in milliseconds */
 #define CONFIG_PAN_CONFIG_SOLICIT_CLK_DURATION    6000
 /*! Default Reporting Interval - in milliseconds */
-#define CONFIG_REPORTING_INTERVAL  180000
+#define CONFIG_REPORTING_INTERVAL  500//180000
 #else
 /*! Polling interval in milliseconds */
 #define CONFIG_POLLING_INTERVAL      60000

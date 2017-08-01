@@ -31,7 +31,7 @@
 **/
 
 
-#include <HW_drivers/Mem_Flash.h>
+#include <Mem_Flash.h>
 
 static void send_byte(uint8_t byte_value)
 {

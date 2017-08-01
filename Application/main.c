@@ -97,7 +97,8 @@
 
 #include "api_mac.h"
 #include "ssf.h"
-#include "uart_printf.h"
+//#include "uart_printf.h"
+#include <ti/drivers/UART.h>
 
 #include "sensor.h"
 #if defined(ASSERT_LEDS)
@@ -167,6 +168,9 @@ mac_Config_t Main_user1Cfg = { 0 };
 #endif
 
 #if defined(BOARD_DISPLAY_USE_UART)
+UART_Params uartParams;
+#endif
+#if defined(BOARD_EPD_USE_UART)
 UART_Params uartParams;
 #endif
 
