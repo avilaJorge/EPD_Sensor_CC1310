@@ -84,11 +84,14 @@
 /* Size of image data buffer */
 #define IMAGE_DATA_BUFFER_SIZE 4000
 
-/* Image data packet size */
-#define IMAGE_DATA_PACKET_SIZE 100
+/* Image data RF packet size */
+#define IMAGE_DATA_RF_PACKET_SIZE 101
+
+/* Image data UART packet size */
+#define IMAGE_DATA_UART_PACKET_SIZE 32
 
 /* Number of image packets */
-#define IMAGE_DATA_NUM_PACKETS 469
+#define IMAGE_DATA_NUM_PACKETS 150
 
 /* default MSDU Handle rollover */
 #define MSDU_HANDLE_MAX 0x1F
@@ -181,7 +184,7 @@ static uint8_t dataBuf[IMAGE_DATA_BUFFER_SIZE];
 static uint16_t packetIndex = 0;
 
 /* Data array for sending UART messages */
-static uint8_t uartImageDataPacket[IMAGE_DATA_PACKET_SIZE];
+static uint8_t uartImageDataPacket[IMAGE_DATA_UART_PACKET_SIZE];
 
 /*! Device's Outgoing MSDU Handle values */
 STATIC uint8_t deviceTxMsduHandle = 0;
@@ -1286,10 +1289,10 @@ static uint8_t receiveImageData(ApiMac_mcpsDataInd_t *pDataInd) {
     uint8_t bytesReceived = 0;
 
     /* Make sure the message is the correct size */
-    if(pDataInd->msdu.len == IMAGE_DATA_PACKET_SIZE + 1) {
+    if(pDataInd->msdu.len == IMAGE_DATA_RF_PACKET_SIZE) {
         // Put image data in the buffer
         int i;
-        for(i = 1; i < IMAGE_DATA_PACKET_SIZE + 1; i++) {
+        for(i = 1; i < IMAGE_DATA_RF_PACKET_SIZE; i++) {
             RingBuf_put(ringBufHandle, pBuf[i]);
             bytesReceived++;
         }
@@ -1315,7 +1318,7 @@ static uint16_t sendImageDataPacket(void) {
 
     /* Load data buffer with image data */
     if(RingBuf_getCount(ringBufHandle) > 0) {
-        for(i = 0; i < IMAGE_DATA_PACKET_SIZE; i++) {
+        for(i = 0; i < IMAGE_DATA_UART_PACKET_SIZE; i++) {
             RingBuf_get(ringBufHandle, &imageByte);
             uartImageDataPacket[i] = imageByte;
         }
@@ -1324,9 +1327,10 @@ static uint16_t sendImageDataPacket(void) {
     /* Send UART messages */
     bytesSent = UART_write(uartHandle, (uint8_t *) &imageCmdInfo,
                            sizeof(Command_info_t));
+    //Short pause required by PDI Apps
     for(i = 0; i < 3; i++) {}
     bytesSent += UART_write(uartHandle, (uint8_t *) uartImageDataPacket,
-                            IMAGE_DATA_PACKET_SIZE);
+                            IMAGE_DATA_UART_PACKET_SIZE);
 
     imageCmdInfo.Packet_index++;
     return bytesSent;
