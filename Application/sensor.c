@@ -90,8 +90,11 @@
 /* Image data UART packet size */
 #define IMAGE_DATA_UART_PACKET_SIZE 32
 
-/* Number of image packets */
-#define IMAGE_DATA_NUM_PACKETS 150
+/* Number of image data packets to receive from RF*/
+#define IMAGE_DATA_NUM_RX_RF_PACKETS 150
+
+/* Number of image data packets to send via UART*/
+#define IMAGE_DATA_NUM_TX_UART_PACKETS 469
 
 /* default MSDU Handle rollover */
 #define MSDU_HANDLE_MAX 0x1F
@@ -180,8 +183,11 @@ static RingBuf_Handle ringBufHandle = &ringBufObj;
 /* Buffer for receiving image data */
 static uint8_t dataBuf[IMAGE_DATA_BUFFER_SIZE];
 
-/* Index of image data packet */
-static uint16_t packetIndex = 0;
+/* Index of sent image data packet */
+static uint16_t txPacketIndex = 0;
+
+/* Index of received image data packet */
+static uint16_t rxPacketIndex = 0;
 
 /* Data array for sending UART messages */
 static uint8_t uartImageDataPacket[IMAGE_DATA_UART_PACKET_SIZE];
@@ -221,13 +227,13 @@ Command_info_t eraseCmdInfo = {
         0,              // Packet_Index
         CMD_EraseFlash, // cmd
         6,              // Length
-        Res_Not,        // Response
-        Result_OK       // Result
+        Res_Result,     // Response
+        Result_Fail       // Result
 };
 
 Flash_Parameter_Info_t eraseFlashInfo = {
         0x001A0000, // Address //TODO: Get this information from Flash libraries in PDI Apps
-        0x0080      // Length
+        0x0008      // Length
 };
 
 /* For CMD_WriteImageFileInfo */
@@ -243,7 +249,7 @@ Command_info_t imageFileCmdInfo = {
 
 ImageFile_info_t imageFileInfo = {
         0x001A7FE0,             //Address; //TODO: Use Enums for these
-        IMAGE_DATA_NUM_PACKETS, //ImagePacketLen; //TODO: Update using sent data
+        IMAGE_DATA_NUM_TX_UART_PACKETS, //ImagePacketLen; //TODO: Update using sent data
         M_IsExist,              //Mark; (0xFE = M_IsExist)
         11,                     //PanelSize;
         0x03,                   //ImageType;
@@ -562,26 +568,25 @@ void Sensor_process(void)
 
         /* Clear the start EPD event and set the send EPD image data event */
         Util_clearEvent(&Sensor_events, SENSOR_START_EPD_UPDATE_EVT);
-        Util_setEvent(&Sensor_events, SENSOR_SEND_EPD_IMAGE_DATA_EVT);
-
     }
 
     /* Are we ready to begin sending image data via UART? */
     if(Sensor_events & SENSOR_SEND_EPD_IMAGE_DATA_EVT) {
 
         /* Are we done sending packets? */
-        if(packetIndex < IMAGE_DATA_NUM_PACKETS) {
+        if(txPacketIndex < IMAGE_DATA_NUM_TX_UART_PACKETS) {
 
             /* Is there anything left to send in the RingBuf? */
             if(RingBuf_getCount(ringBufHandle) > 0) {
                 sendImageDataPacket();
-                packetIndex++;
+                txPacketIndex++;
             } else {
                 /* Clear the event that calls this function in order to continue RX */
                 Util_clearEvent(&Sensor_events, SENSOR_SEND_EPD_IMAGE_DATA_EVT);
             }
         } else {
-            /* If so clear send event and set display event */
+            /* If so clear send event, reset packetIndex and set display event */
+            txPacketIndex = 0;
             Util_clearEvent(&Sensor_events, SENSOR_SEND_EPD_IMAGE_DATA_EVT);
             Util_setEvent(&Sensor_events, SENSOR_DISPLAY_IMAGE_EVT);
         }
@@ -1241,6 +1246,10 @@ static void processImageDataRequest(ApiMac_mcpsDataInd_t *pDataInd) {
                        true,
                        SMSGS_IMAGE_DATA_RESPONSE_MSG_LEN,
                        msgBuf);
+
+        /* We are ready to start the EPD update, set event and reset rxPacketIndex*/
+        Util_setEvent(&Sensor_events, SENSOR_START_EPD_UPDATE_EVT);
+        rxPacketIndex = 0;
     }
 }
 
@@ -1298,8 +1307,13 @@ static uint8_t receiveImageData(ApiMac_mcpsDataInd_t *pDataInd) {
         }
     }
 
-    /* Set the UART event if the RingBuf is full */
-    if(RingBuf_isFull(ringBufHandle)) {
+    Ssf_toggleLED();
+
+    /* Increment rxPacketIndex */
+    rxPacketIndex++;
+
+    /* Set the UART event if the RingBuf is full or we are done receiving packets*/
+    if(RingBuf_isFull(ringBufHandle) || (rxPacketIndex > IMAGE_DATA_NUM_RX_RF_PACKETS )) {
         Util_setEvent(&Sensor_events, SENSOR_SEND_EPD_IMAGE_DATA_EVT);
     }
     return bytesReceived;
