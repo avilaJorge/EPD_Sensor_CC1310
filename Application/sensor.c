@@ -586,7 +586,6 @@ void Sensor_process(void)
             }
         } else {
             /* If so clear send event, reset packetIndex and set display event */
-            txPacketIndex = 0;
             Util_clearEvent(&Sensor_events, SENSOR_SEND_EPD_IMAGE_DATA_EVT);
             Util_setEvent(&Sensor_events, SENSOR_DISPLAY_IMAGE_EVT);
         }
@@ -1247,9 +1246,10 @@ static void processImageDataRequest(ApiMac_mcpsDataInd_t *pDataInd) {
                        SMSGS_IMAGE_DATA_RESPONSE_MSG_LEN,
                        msgBuf);
 
-        /* We are ready to start the EPD update, set event and reset rxPacketIndex*/
+        /* We are ready to start the EPD update, set event and reset indices*/
         Util_setEvent(&Sensor_events, SENSOR_START_EPD_UPDATE_EVT);
         rxPacketIndex = 0;
+        txPacketIndex = 0;
     }
 }
 
@@ -1313,7 +1313,7 @@ static uint8_t receiveImageData(ApiMac_mcpsDataInd_t *pDataInd) {
     rxPacketIndex++;
 
     /* Set the UART event if the RingBuf is full or we are done receiving packets*/
-    if(RingBuf_isFull(ringBufHandle) || (rxPacketIndex > IMAGE_DATA_NUM_RX_RF_PACKETS )) {
+    if(RingBuf_isFull(ringBufHandle) || (rxPacketIndex >= IMAGE_DATA_NUM_RX_RF_PACKETS )) {
         Util_setEvent(&Sensor_events, SENSOR_SEND_EPD_IMAGE_DATA_EVT);
     }
     return bytesReceived;

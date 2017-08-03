@@ -415,7 +415,7 @@ Void main()
     /* Enable sending image data to EPD via UART */
     UART_init();
     UART_Params_init(&uartParams);
-    uartParams.baudRate = 115200;
+    uartParams.baudRate = 230400;
     uartHandle = UART_open(Board_UART0, &uartParams);
 #endif /* BOARD_EPD_USE_UART */
 #endif
