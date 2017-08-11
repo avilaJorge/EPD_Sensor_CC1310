@@ -88,13 +88,13 @@
 #define IMAGE_DATA_RF_PACKET_SIZE 101
 
 /* Image data UART packet size */
-#define IMAGE_DATA_UART_PACKET_SIZE 32
+#define IMAGE_DATA_UART_PACKET_SIZE 38
 
 /* Number of image data packets to receive from RF*/
-#define IMAGE_DATA_NUM_RX_RF_PACKETS 150
+#define IMAGE_DATA_NUM_RX_RF_PACKETS 300
 
 /* Number of image data packets to send via UART*/
-#define IMAGE_DATA_NUM_TX_UART_PACKETS 469
+#define IMAGE_DATA_NUM_TX_UART_PACKETS 938
 
 /* default MSDU Handle rollover */
 #define MSDU_HANDLE_MAX 0x1F
@@ -188,9 +188,6 @@ static uint16_t txPacketIndex = 0;
 
 /* Index of received image data packet */
 static uint16_t rxPacketIndex = 0;
-
-/* Data array for sending UART messages */
-static uint8_t uartImageDataPacket[IMAGE_DATA_UART_PACKET_SIZE];
 
 /*! Device's Outgoing MSDU Handle values */
 STATIC uint8_t deviceTxMsduHandle = 0;
@@ -1332,9 +1329,9 @@ static uint16_t sendImageDataPacket(void) {
 
     /* Load data buffer with image data */
     if(RingBuf_getCount(ringBufHandle) > 0) {
-        for(i = 0; i < IMAGE_DATA_UART_PACKET_SIZE; i++) {
+        for(i = 0; i < Flash_Payload_Size; i++) {
             RingBuf_get(ringBufHandle, &imageByte);
-            uartImageDataPacket[i] = imageByte;
+            imageDataInfo.data[i] = imageByte;
         }
     }
 
@@ -1343,7 +1340,7 @@ static uint16_t sendImageDataPacket(void) {
                            sizeof(Command_info_t));
     //Short pause required by PDI Apps
     for(i = 0; i < 3; i++) {}
-    bytesSent += UART_write(uartHandle, (uint8_t *) uartImageDataPacket,
+    bytesSent += UART_write(uartHandle, (uint8_t *) &imageDataInfo,
                             IMAGE_DATA_UART_PACKET_SIZE);
 
     imageCmdInfo.Packet_index++;
