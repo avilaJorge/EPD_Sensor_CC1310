@@ -87,14 +87,17 @@
 /* Image data RF packet size */
 #define IMAGE_DATA_RF_PACKET_SIZE 101
 
-/* Image data UART packet size */
-#define IMAGE_DATA_UART_PACKET_SIZE 38
-
 /* Number of image data packets to receive from RF*/
 #define IMAGE_DATA_NUM_RX_RF_PACKETS 300
 
 /* Number of image data packets to send via UART*/
 #define IMAGE_DATA_NUM_TX_UART_PACKETS 938
+
+/* Size of Image file info packet */
+#define IMAGE_FILE_INFO_PACKET_SIZE 41
+
+/* Initial Image Memory Address */
+#define INIT_MEM_ADDRESS 0x001B0000
 
 /* default MSDU Handle rollover */
 #define MSDU_HANDLE_MAX 0x1F
@@ -221,7 +224,7 @@ STATIC Llc_netInfo_t parentInfo = {0};
 Command_info_t eraseCmdInfo = {
         RECV_HEADER0,   // Header0
         RECV_HEADER1,   // Header1
-        0,              // Packet_Index
+        0x0B0D,         // Packet_Index
         CMD_EraseFlash, // cmd
         6,              // Length
         Res_Result,     // Response
@@ -229,7 +232,7 @@ Command_info_t eraseCmdInfo = {
 };
 
 Flash_Parameter_Info_t eraseFlashInfo = {
-        0x001A0000, // Address //TODO: Get this information from Flash libraries in PDI Apps
+        INIT_MEM_ADDRESS, // Address //TODO: Get this information from Flash libraries in PDI Apps
         0x0008      // Length
 };
 
@@ -237,7 +240,7 @@ Flash_Parameter_Info_t eraseFlashInfo = {
 Command_info_t imageFileCmdInfo = {
         RECV_HEADER0,           // Header0
         RECV_HEADER1,           // Header1
-        0,                      // Packet_Index
+        0x0B0E,                 // Packet_Index
         CMD_WriteImageFileInfo, // cmd
         0x0020,                 // Length
         Res_Result,             // Response
@@ -245,19 +248,19 @@ Command_info_t imageFileCmdInfo = {
 };
 
 ImageFile_info_t imageFileInfo = {
-        0x001A7FE0,             //Address; //TODO: Use Enums for these
+        0x001B7FE0,             //Address; //TODO: Use Enums for these
         IMAGE_DATA_NUM_TX_UART_PACKETS, //ImagePacketLen; //TODO: Update using sent data
         M_IsExist,              //Mark; (0xFE = M_IsExist)
         11,                     //PanelSize;
         0x03,                   //ImageType;
-        "Danger"                //Name[23];
+        "RedBar_BlackOutline"   //Name[23];
 };
 
 /* For CMD_WriteImageData */
 Command_info_t imageCmdInfo = {
         RECV_HEADER0,           // Header0
         RECV_HEADER1,           // Header1
-        0,                      // Packet_Index
+        0x0B0F,                 // Packet_Index
         CMD_WriteImageData,     // cmd
         0x0026,                 // Length
         Res_Not,                // Response
@@ -265,7 +268,7 @@ Command_info_t imageCmdInfo = {
 };
 
 Flash_Info_t imageDataInfo = {
-        0x001A0000,             // Address
+        INIT_MEM_ADDRESS,             // Address
         0x0020                  // Length
 };
 
@@ -275,7 +278,7 @@ Command_info_t showCmdInfo = {
         RECV_HEADER1,           // Header1
         0,                      // Packet_Index
         CMD_EPDShow,            // cmd
-        0x00C0,                 // Length
+        0x000C,                 // Length
         Res_Result,             // Response
         Result_Fail             // Result
 };
@@ -285,9 +288,36 @@ ShowEpd_Info_t showInfo = {
         0x0B,                   // EPD_Size
         0x9C,                   // Temperature
         OTP_Mode,               // IsOTP (OperationMode_t)
-        0x001A0000,             // PrevImageAddress
-        0x001A0000              // NewImageAddress
+        INIT_MEM_ADDRESS,             // PrevImageAddress
+        INIT_MEM_ADDRESS              // NewImageAddress
 };
+
+/* Variables for setting up image data packets */
+typedef struct
+{
+    Command_info_t  cmd_info;
+    Flash_Info_t    payload;
+
+} Image_Data_Packet;
+Image_Data_Packet imageDataPacket;
+
+/* struct for setting up erase flash packet */
+typedef struct {
+    Command_info_t cmd_info;
+    Flash_Parameter_Info_t erase_info;
+} Erase_Flash_Packet;
+
+/* struct for setting up image file info packet */
+typedef struct {
+    Command_info_t cmd_info;
+    uint8_t        payload[PayloadSize];
+} Image_File_Info_Packet;
+
+/* struct for setting up display packet */
+typedef struct {
+    Command_info_t cmd_info;
+    ShowEpd_Info_t show_info;
+} Show_Image_Info_Packet;
 
 /******************************************************************************
  Local function prototypes
@@ -1260,25 +1290,43 @@ static void processImageDataRequest(ApiMac_mcpsDataInd_t *pDataInd) {
 static uint16_t startEPDUpdate(void) {
 
     uint16_t bytesSent = 0;
+    int numUARTBytes;
+    uint8_t byte;
+    receive_response_info_t eraseResponse;
+    receive_response_info_t fileResponse;
+    Erase_Flash_Packet eraseFlashPacket;
+    Image_File_Info_Packet imageFileInfoPacket;
 
-    /* First we send the erase flash command */
-    bytesSent = UART_write(uartHandle, (uint8_t *) &eraseCmdInfo,
-                           sizeof(Command_info_t));
-    // After a short pause we can send the payload
-    // TODO: Replace this with something better
-    int i;
-    for(i = 0; i < 3; i++) { }
-    // Send the message payload
-    bytesSent += UART_write(uartHandle, (uint8_t *) &eraseFlashInfo,
-                           sizeof(Flash_Parameter_Info_t));
-    // Another short pause
-    for(i = 0; i < 3; i++) { }
-    bytesSent += UART_write(uartHandle, (uint8_t *) &imageFileCmdInfo,
-                           sizeof(Command_info_t));
-    // One last short pause
-    for(i = 0; i < 3; i++) { }
-    bytesSent += UART_write(uartHandle, (uint8_t *) &imageFileInfo,
-                           sizeof(ImageFile_info_t));
+    /* Setup image Data packet (reset) */
+    imageDataPacket.cmd_info = imageCmdInfo;
+    imageDataPacket.payload = imageDataInfo;
+
+    /* Setup erase flash packet */
+    eraseFlashPacket.cmd_info = eraseCmdInfo;
+    eraseFlashPacket.erase_info = eraseFlashInfo;
+
+    /* Setup image file info packet */
+    imageFileInfoPacket.cmd_info = imageFileCmdInfo;
+    memcpy(imageFileInfoPacket.payload, (uint8_t *) &imageFileInfo, PayloadSize);
+
+    /* Clear UART buffer */
+    UART_control(uartHandle, UART_CMD_GETRXCOUNT, &numUARTBytes);
+    UART_readPolling(uartHandle, &byte, numUARTBytes);
+
+    /* Send erase flash packet */
+    bytesSent = UART_write(uartHandle, (uint8_t *) &eraseFlashPacket,
+                           sizeof(Erase_Flash_Packet));
+
+    /* Wait for response */
+    UART_readPolling(uartHandle, &eraseResponse, sizeof(receive_response_info_t));
+
+    /* Send image file info packet */
+    bytesSent += UART_write(uartHandle, (uint8_t *) &imageFileInfoPacket,
+                            IMAGE_FILE_INFO_PACKET_SIZE);
+
+    /* Wait for response */
+    UART_readPolling(uartHandle, &fileResponse, sizeof(receive_response_info_t));
+
     return bytesSent;
 }
 
@@ -1323,27 +1371,28 @@ static uint8_t receiveImageData(ApiMac_mcpsDataInd_t *pDataInd) {
  */
 static uint16_t sendImageDataPacket(void) {
 
-    int i;
+    uint8_t i;
     uint16_t bytesSent = 0;
     uint8_t imageByte;
+
+    if(txPacketIndex >= (IMAGE_DATA_NUM_TX_UART_PACKETS - 1)) {
+        imageDataPacket.cmd_info.Response = Res_Result;
+    }
 
     /* Load data buffer with image data */
     if(RingBuf_getCount(ringBufHandle) > 0) {
         for(i = 0; i < Flash_Payload_Size; i++) {
             RingBuf_get(ringBufHandle, &imageByte);
-            imageDataInfo.data[i] = imageByte;
+            imageDataPacket.payload.data[i] = imageByte;
         }
     }
 
-    /* Send UART messages */
-    bytesSent = UART_write(uartHandle, (uint8_t *) &imageCmdInfo,
-                           sizeof(Command_info_t));
-    //Short pause required by PDI Apps
-    for(i = 0; i < 3; i++) {}
-    bytesSent += UART_write(uartHandle, (uint8_t *) &imageDataInfo,
-                            IMAGE_DATA_UART_PACKET_SIZE);
+    /* Send UART message */
+    bytesSent = UART_write(uartHandle, (uint8_t *) &imageDataPacket,
+                           sizeof(Image_Data_Packet));
 
-    imageCmdInfo.Packet_index++;
+    imageDataPacket.payload.Address += imageDataPacket.payload.Length;
+    imageDataPacket.cmd_info.Packet_index++;
     return bytesSent;
 }
 
@@ -1355,14 +1404,18 @@ static uint16_t sendImageDataPacket(void) {
 static uint16_t displayImage(void) {
 
     uint16_t bytesSent = 0;
-    int i;
+    receive_response_info_t response;
+    Show_Image_Info_Packet showImagePacket;
+
+    showImagePacket.cmd_info = showCmdInfo;
+    showImagePacket.cmd_info.Packet_index = imageDataPacket.cmd_info.Packet_index;
+    showImagePacket.show_info = showInfo;
+
+    UART_readPolling(uartHandle, &response, sizeof(receive_response_info_t));
 
     /* Send UART messages */
-    bytesSent = UART_write(uartHandle, (uint8_t *) &showCmdInfo,
-                           sizeof(Command_info_t));
-    for(i = 0; i < 3; i++) {}
-    bytesSent += UART_write(uartHandle, (uint8_t *) &showInfo,
-                           sizeof(ShowEpd_Info_t));
+    bytesSent = UART_write(uartHandle, (uint8_t *) &showImagePacket,
+                           sizeof(Show_Image_Info_Packet));
 
     return bytesSent;
 }
